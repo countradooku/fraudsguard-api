@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
         // Create demo user
         $demoUser = User::create([
             'name' => 'Demo User',
-            'email' => 'demo@fraudguard.com',
+            'email' => 'demos@fraudguard.com',
             'email_verified_at' => now(),
             'password' => Hash::make('password'),
             'company_name' => 'Demo Company',

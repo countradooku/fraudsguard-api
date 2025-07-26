@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\ASN;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -36,7 +37,7 @@ class UpdateASNDatabaseCommand extends Command
         // Check if recently updated (unless forced)
         if (! $this->option('force')) {
             $lastUpdate = ASN::max('updated_at');
-            if ($lastUpdate && $lastUpdate->diffInDays(now()) < 7) {
+            if ($lastUpdate && Carbon::parse($lastUpdate)->diffInDays(now()) < 7) {
                 $this->info('ASN database was recently updated. Use --force to update anyway.');
 
                 return 0;

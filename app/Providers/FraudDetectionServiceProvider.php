@@ -30,6 +30,12 @@ class FraudDetectionServiceProvider extends ServiceProvider
             return new RiskScorer;
         });
 
+        // Register data source updaters
+        $this->app->singleton(\App\Services\FraudDetection\DataSources\TorExitNodeUpdater::class);
+        $this->app->singleton(\App\Services\FraudDetection\DataSources\DisposableEmailUpdater::class);
+        $this->app->singleton(\App\Services\FraudDetection\DataSources\ASNUpdater::class);
+        $this->app->singleton(\App\Services\FraudDetection\DataSources\UserAgentUpdater::class);
+
         // Register individual checks
         $this->app->bind(EmailCheck::class, function ($app) {
             return new EmailCheck($app->make(HashingService::class));

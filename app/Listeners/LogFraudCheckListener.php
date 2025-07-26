@@ -2,6 +2,7 @@
 
 namespace App\Listeners;
 
+use App\Events\FraudCheckPerformedEvent;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
@@ -20,7 +21,7 @@ class LogFraudCheckListener implements ShouldQueue
     /**
      * Handle the event.
      */
-    public function handle(FraudCheckPerformed $event): void
+    public function handle(FraudCheckPerformedEvent $event): void
     {
         $result = $event->result;
         $user = $event->user;
@@ -58,7 +59,7 @@ class LogFraudCheckListener implements ShouldQueue
     /**
      * Handle a job failure.
      */
-    public function failed(FraudCheckPerformed $event, \Throwable $exception): void
+    public function failed(FraudCheckPerformedEvent $event, \Throwable $exception): void
     {
         Log::channel('fraud-detection')->error('Failed to log fraud check', [
             'fraud_check_id' => $event->result['id'] ?? null,

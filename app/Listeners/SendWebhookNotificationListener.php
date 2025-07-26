@@ -3,6 +3,7 @@
 namespace App\Listeners;
 
 use App\Events\FraudCheckPerformed;
+use App\Events\FraudCheckPerformedEvent;
 use App\Services\WebhookService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
@@ -37,7 +38,7 @@ class SendWebhookNotificationListener implements ShouldQueue
     /**
      * Handle the event.
      */
-    public function handle(FraudCheckPerformed $event): void
+    public function handle(FraudCheckPerformedEvent $event): void
     {
         $user = $event->user;
         $result = $event->result;
@@ -57,31 +58,23 @@ class SendWebhookNotificationListener implements ShouldQueue
         // Prepare webhook payload
         $payload = $this->preparePayload($event, $webhookConfig);
 
-        // Send webhook
-        try {
-            $response = $this->webhookService->send(
-                $webhookConfig['url'],
-                $payload,
-                $webhookConfig['secret'] ?? null
-            );
-
-            Log::info('Webhook sent successfully', [
+        // Dispatch webhook job
+        \App\Jobs\SendWebhookJob::dispatch(
+            $payload,
+            $webhookConfig['url'],
+            $webhookConfig['secret'] ?? null,
+            [
                 'user_id' => $user->id,
                 'fraud_check_id' => $result['id'],
-                'webhook_url' => $webhookConfig['url'],
-                'response_code' => $response['status_code'],
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Failed to send webhook', [
-                'user_id' => $user->id,
-                'fraud_check_id' => $result['id'],
-                'webhook_url' => $webhookConfig['url'],
-                'error' => $e->getMessage(),
-            ]);
+                'event_type' => 'fraud_check_performed',
+            ]
+        );
 
-            // Re-throw to trigger retry
-            throw $e;
-        }
+        Log::info('Webhook job dispatched', [
+            'user_id' => $user->id,
+            'fraud_check_id' => $result['id'],
+            'webhook_url' => $webhookConfig['url'],
+        ]);
     }
 
     /**
