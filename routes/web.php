@@ -14,14 +14,14 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Redirect to frontend app
-Route::get('/', function () {
-    return redirect(config('app.frontend_url', 'http://localhost:3000'));
-});
-
-// API documentation (optional, if using Swagger)
-Route::get('/api/documentation', function () {
-    return view('documentation.api');
-})->name('api.docs');
+//Route::get('/', function () {
+//    return redirect(config('app.frontend_url', 'http://localhost:3000'));
+//});
+//
+//// API documentation (optional, if using Swagger)
+//Route::get('/api/documentation', function () {
+//    return view('documentation.api');
+//})->name('api.docs');
 
 // Health check
 Route::get('/health', function () {

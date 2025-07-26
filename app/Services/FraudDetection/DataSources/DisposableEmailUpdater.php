@@ -23,32 +23,52 @@ class DisposableEmailUpdater
             'url' => 'https://raw.githubusercontent.com/wesbos/burner-email-providers/master/emails.txt',
             'format' => 'text',
         ],
-        'disposable-email-domains-json' => [
-            'url' => 'https://raw.githubusercontent.com/ivolo/disposable-email-domains/master/index.json',
-            'format' => 'json',
-        ],
-        'temp-mail-domains' => [
-            'url' => 'https://raw.githubusercontent.com/ivolo/disposable-email-domains/master/wildcard.json',
-            'format' => 'json',
-        ],
     ];
+
+    protected int $chunkSize = 1000;
+    protected int $memoryLimit;
+
+    public function __construct()
+    {
+        $memoryLimitString = ini_get('memory_limit');
+
+        if ($memoryLimitString === '-1') {
+            // Handle unlimited memory if needed, e.g., set a high default
+            // For now, we'll just avoid calculation.
+            // You might want to assign a large, but finite, number.
+            $this->memoryLimit = PHP_INT_MAX;
+        } else {
+            $memoryInBytes = $this->convertShorthandToBytes($memoryLimitString);
+            $this->memoryLimit = (int) ($memoryInBytes * 0.8);
+        }
+    }
 
     /**
      * Update disposable email domains from all sources.
      */
     public function updateAll(): array
     {
+        // Increase memory limit
+        ini_set('memory_limit', '512M');
+
         $results = [];
-        $allDomains = [];
+        $totalDomains = 0;
+
+        // Mark all existing domains as inactive first
+        DB::statement('UPDATE disposable_email_domains SET is_active = false');
 
         foreach ($this->sources as $name => $config) {
             try {
-                $domains = $this->fetchFromSource($name, $config);
+                $count = $this->fetchAndProcessSource($name, $config);
                 $results[$name] = [
                     'success' => true,
-                    'count' => count($domains),
+                    'count' => $count,
                 ];
-                $allDomains = array_merge($allDomains, $domains);
+                $totalDomains += $count;
+
+                // Force garbage collection after each source
+                gc_collect_cycles();
+
             } catch (\Exception $e) {
                 $results[$name] = [
                     'success' => false,
@@ -58,165 +78,169 @@ class DisposableEmailUpdater
                     'error' => $e->getMessage(),
                 ]);
             }
+
+            // Check memory usage
+            if (memory_get_usage() > $this->memoryLimit) {
+                Log::warning('Memory usage high, forcing garbage collection', [
+                    'memory_usage' => memory_get_usage(true),
+                    'memory_peak' => memory_get_peak_usage(true),
+                ]);
+                gc_collect_cycles();
+            }
         }
 
         // Also check for local custom list
-        $customDomains = $this->loadCustomDomains();
-        if (! empty($customDomains)) {
-            $allDomains = array_merge($allDomains, $customDomains);
+        try {
+            $customCount = $this->loadAndProcessCustomDomains();
+            if ($customCount > 0) {
+                $totalDomains += $customCount;
+                $results['custom'] = [
+                    'success' => true,
+                    'count' => $customCount,
+                ];
+            }
+        } catch (\Exception $e) {
             $results['custom'] = [
-                'success' => true,
-                'count' => count($customDomains),
+                'success' => false,
+                'error' => $e->getMessage(),
             ];
         }
 
-        // Remove duplicates and clean
-        $uniqueDomains = $this->cleanAndDeduplicateDomains($allDomains);
-
-        // Validate domains
-        $validDomains = $this->validateDomains($uniqueDomains);
-
-        // Update database
-        $this->updateDatabase($validDomains);
-
-        // Save combined list for reference
-        $this->saveCombinedList($validDomains);
+        // Clean up old inactive domains
+        $this->cleanupOldDomains();
 
         return [
             'sources' => $results,
-            'total_domains' => count($validDomains),
-            'duplicates_removed' => count($uniqueDomains) - count($validDomains),
+            'total_domains' => $totalDomains,
         ];
     }
 
     /**
-     * Fetch domains from a specific source.
+     * Fetch and process domains from a source using streaming.
      */
-    protected function fetchFromSource(string $name, array $config): array
+    protected function fetchAndProcessSource(string $name, array $config): int
     {
-        $response = Http::timeout(30)->get($config['url']);
+        $tempFile = tempnam(sys_get_temp_dir(), "disposable_emails_{$name}_");
+        $processedCount = 0;
 
-        if (! $response->successful()) {
-            throw new \Exception('HTTP request failed with status: '.$response->status());
-        }
+        try {
+            // Download to temporary file to avoid keeping large response in memory
+            $response = Http::timeout(30)->sink($tempFile)->get($config['url']);
 
-        switch ($config['format']) {
-            case 'text':
-                return $this->parseTextFormat($response->body());
-            case 'json':
-                return $this->parseJsonFormat($response->json());
-            default:
-                return [];
-        }
-    }
-
-    /**
-     * Parse text format (one domain per line).
-     */
-    protected function parseTextFormat(string $content): array
-    {
-        $domains = [];
-        $lines = explode("\n", $content);
-
-        foreach ($lines as $line) {
-            $domain = trim($line);
-
-            // Skip comments and empty lines
-            if (empty($domain) || str_starts_with($domain, '#') || str_starts_with($domain, '//')) {
-                continue;
+            if (!$response->successful()) {
+                throw new \Exception('HTTP request failed with status: ' . $response->status());
             }
 
-            // Remove any inline comments
-            if (($pos = strpos($domain, '#')) !== false) {
-                $domain = trim(substr($domain, 0, $pos));
+            // Process file line by line
+            $handle = fopen($tempFile, 'r');
+            if (!$handle) {
+                throw new \Exception('Could not open temporary file');
             }
 
-            if (! empty($domain)) {
-                $domains[] = strtolower($domain);
+            $batch = [];
+            $batchSize = 500; // Smaller batch size for memory efficiency
+
+            while (($line = fgets($handle)) !== false) {
+                $domain = $this->cleanDomain(trim($line));
+
+                if ($this->isValidDomain($domain)) {
+                    $batch[] = $domain;
+
+                    if (count($batch) >= $batchSize) {
+                        $this->processBatch($batch);
+                        $processedCount += count($batch);
+                        $batch = []; // Clear batch from memory
+
+                        // Periodic garbage collection
+                        if ($processedCount % 5000 === 0) {
+                            gc_collect_cycles();
+                        }
+                    }
+                }
             }
+
+            // Process remaining domains
+            if (!empty($batch)) {
+                $this->processBatch($batch);
+                $processedCount += count($batch);
+            }
+
+            fclose($handle);
+
+        } finally {
+            @unlink($tempFile);
         }
 
-        return $domains;
+        return $processedCount;
     }
 
     /**
-     * Parse JSON format.
+     * Process a batch of domains.
      */
-    protected function parseJsonFormat($data): array
+    protected function processBatch(array $domains): void
     {
-        if (! is_array($data)) {
-            return [];
+        if (empty($domains)) {
+            return;
         }
 
-        return array_map('strtolower', $data);
-    }
-
-    /**
-     * Load custom domains from local file.
-     */
-    protected function loadCustomDomains(): array
-    {
-        $path = 'fraud-detection/custom-disposable-domains.txt';
-
-        if (! Storage::exists($path)) {
-            return [];
-        }
-
-        $content = Storage::get($path);
-
-        return $this->parseTextFormat($content);
-    }
-
-    /**
-     * Clean and deduplicate domains.
-     */
-    protected function cleanAndDeduplicateDomains(array $domains): array
-    {
-        $cleaned = [];
+        $data = [];
+        $now = now();
 
         foreach ($domains as $domain) {
-            // Basic cleaning
-            $domain = trim(strtolower($domain));
-
-            // Remove wildcards (we'll handle subdomains differently)
-            $domain = ltrim($domain, '*.');
-
-            // Skip invalid entries
-            if (empty($domain) || strlen($domain) < 4) {
-                continue;
-            }
-
-            $cleaned[] = $domain;
+            $data[] = [
+                'domain' => $domain,
+                'source' => 'automated',
+                'risk_weight' => $this->calculateRiskWeight($domain),
+                'is_active' => true,
+                'verified_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
         }
 
-        return array_unique($cleaned);
+        // Use upsert to handle duplicates efficiently
+        DisposableEmailDomain::upsert(
+            $data,
+            ['domain'], // Unique key
+            ['source', 'is_active', 'verified_at', 'updated_at']
+        );
+
+        // Clear data array from memory
+        unset($data);
+    }
+
+    /**
+     * Clean domain string.
+     */
+    protected function cleanDomain(string $line): string
+    {
+        // Skip comments and empty lines
+        if (empty($line) || str_starts_with($line, '#') || str_starts_with($line, '//')) {
+            return '';
+        }
+
+        // Remove any inline comments
+        if (($pos = strpos($line, '#')) !== false) {
+            $line = trim(substr($line, 0, $pos));
+        }
+
+        // Remove wildcards
+        $domain = ltrim($line, '*.');
+
+        return strtolower($domain);
     }
 
     /**
      * Validate domain format.
      */
-    protected function validateDomains(array $domains): array
-    {
-        $valid = [];
-
-        foreach ($domains as $domain) {
-            if ($this->isValidDomain($domain)) {
-                $valid[] = $domain;
-            } else {
-                Log::debug("Invalid domain format: {$domain}");
-            }
-        }
-
-        return $valid;
-    }
-
-    /**
-     * Check if domain format is valid.
-     */
     protected function isValidDomain(string $domain): bool
     {
+        if (empty($domain) || strlen($domain) < 4) {
+            return false;
+        }
+
         // Basic domain validation
-        if (! preg_match('/^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i', $domain)) {
+        if (!preg_match('/^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i', $domain)) {
             return false;
         }
 
@@ -225,55 +249,61 @@ class DisposableEmailUpdater
             return false;
         }
 
-        // Validate TLD
-        $parts = explode('.', $domain);
-        $tld = end($parts);
-        if (strlen($tld) < 2 || ! ctype_alpha($tld)) {
-            return false;
-        }
-
         return true;
     }
 
     /**
-     * Update database with validated domains.
+     * Load and process custom domains.
      */
-    protected function updateDatabase(array $domains): void
+    protected function loadAndProcessCustomDomains(): int
     {
-        DB::transaction(function () use ($domains) {
-            // Mark all existing domains as inactive
-            DisposableEmailDomain::query()->update(['is_active' => false]);
+        $path = 'fraud-detection/custom-disposable-domains.txt';
 
-            // Batch upsert domains
-            $chunks = array_chunk($domains, 1000);
+        if (!Storage::exists($path)) {
+            return 0;
+        }
 
-            foreach ($chunks as $chunk) {
-                $data = [];
+        $tempFile = tempnam(sys_get_temp_dir(), 'custom_domains_');
+        Storage::copy($path, $tempFile);
 
-                foreach ($chunk as $domain) {
-                    $data[] = [
-                        'domain' => $domain,
-                        'source' => 'automated',
-                        'risk_weight' => $this->calculateRiskWeight($domain),
-                        'is_active' => true,
-                        'verified_at' => now(),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-                }
+        $processedCount = 0;
 
-                DisposableEmailDomain::upsert(
-                    $data,
-                    ['domain'], // Unique key
-                    ['source', 'is_active', 'verified_at', 'updated_at']
-                );
+        try {
+            $handle = fopen($tempFile, 'r');
+            if (!$handle) {
+                return 0;
             }
 
-            // Remove domains not seen in multiple updates
-            DisposableEmailDomain::where('is_active', false)
-                ->where('updated_at', '<', now()->subDays(7))
-                ->delete();
-        });
+            $batch = [];
+            $batchSize = 500;
+
+            while (($line = fgets($handle)) !== false) {
+                $domain = $this->cleanDomain(trim($line));
+
+                if ($this->isValidDomain($domain)) {
+                    $batch[] = $domain;
+
+                    if (count($batch) >= $batchSize) {
+                        $this->processBatch($batch);
+                        $processedCount += count($batch);
+                        $batch = [];
+                    }
+                }
+            }
+
+            // Process remaining domains
+            if (!empty($batch)) {
+                $this->processBatch($batch);
+                $processedCount += count($batch);
+            }
+
+            fclose($handle);
+
+        } finally {
+            @unlink($tempFile);
+        }
+
+        return $processedCount;
     }
 
     /**
@@ -299,22 +329,38 @@ class DisposableEmailUpdater
             }
         }
 
-        // Default weight for disposable domains
-        return 80;
+        return 80; // Default weight
     }
 
     /**
-     * Save combined list for reference.
+     * Clean up old inactive domains.
      */
-    protected function saveCombinedList(array $domains): void
+    protected function cleanupOldDomains(): void
     {
-        $content = "# Disposable Email Domains\n";
-        $content .= '# Generated: '.now()->toDateTimeString()."\n";
-        $content .= '# Total domains: '.count($domains)."\n\n";
+        DB::statement('DELETE FROM disposable_email_domains WHERE is_active = false AND updated_at < ?', [
+            now()->subDays(7)
+        ]);
+    }
 
-        sort($domains);
-        $content .= implode("\n", $domains);
+    /**
+     * Converts a shorthand byte value string (e.g., 256M, 1G) to bytes.
+     */
+    private function convertShorthandToBytes(string $shorthand): int
+    {
+        $shorthand = strtolower(trim($shorthand));
+        $value = (int) $shorthand;
 
-        Storage::put('fraud-detection/disposable-domains-combined.txt', $content);
+        switch (substr($shorthand, -1)) {
+            case 'g':
+                $value *= 1024;
+            // fallthrough
+            case 'm':
+                $value *= 1024;
+            // fallthrough
+            case 'k':
+                $value *= 1024;
+        }
+
+        return $value;
     }
 }

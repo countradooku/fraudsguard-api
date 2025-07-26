@@ -17,37 +17,33 @@ class UpdateDataSourcesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    /**
-     * The number of times the job may be attempted.
-     */
-    public int $tries = 3;
-
-    /**
-     * The number of seconds the job can run before timing out.
-     */
-    public int $timeout = 600; // 10 minutes
+    public int $tries = 2; // Reduced tries
+    public int $timeout = 1200; // 20 minutes
+    public int $memory = 512; // 512MB memory limit
 
     protected string $source;
-
     protected bool $force;
 
-    /**
-     * Create a new job instance.
-     */
     public function __construct(string $source = 'all', bool $force = false)
     {
         $this->source = $source;
         $this->force = $force;
+
+        // Set queue and memory requirements
+        $this->onQueue('data-updates');
     }
 
-    /**
-     * Execute the job.
-     */
     public function handle(): void
     {
+        // Set memory and time limits
+        ini_set('memory_limit', '512M');
+        set_time_limit(1200);
+
         Log::info('Starting data source update', [
             'source' => $this->source,
             'force' => $this->force,
+            'memory_limit' => ini_get('memory_limit'),
+            'initial_memory' => memory_get_usage(true),
         ]);
 
         try {
@@ -68,101 +64,99 @@ class UpdateDataSourcesJob implements ShouldQueue
                     break;
                 case 'all':
                 default:
+                    // Process one at a time to manage memory
                     $results['tor'] = $this->updateTorNodes();
+                    gc_collect_cycles();
+
                     $results['disposable_emails'] = $this->updateDisposableEmails();
-                    $results['asn'] = $this->updateASN();
+                    gc_collect_cycles();
+
                     $results['user_agents'] = $this->updateUserAgents();
+                    gc_collect_cycles();
+
+                    // ASN last as it's most memory intensive
+                    $results['asn'] = $this->updateASN();
                     break;
             }
 
             Log::info('Data source update completed', [
                 'source' => $this->source,
                 'results' => $results,
+                'peak_memory' => memory_get_peak_usage(true),
+                'final_memory' => memory_get_usage(true),
             ]);
 
         } catch (\Exception $e) {
             Log::error('Data source update failed', [
                 'source' => $this->source,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
+                'memory_usage' => memory_get_usage(true),
+                'peak_memory' => memory_get_peak_usage(true),
             ]);
 
             throw $e;
         }
     }
 
-    /**
-     * Update Tor exit nodes.
-     */
     protected function updateTorNodes(): array
     {
         try {
             $updater = app(TorExitNodeUpdater::class);
-
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update Tor nodes', ['error' => $e->getMessage()]);
-
             return ['success' => false, 'error' => $e->getMessage()];
+        } finally {
+            gc_collect_cycles();
         }
     }
 
-    /**
-     * Update disposable email domains.
-     */
     protected function updateDisposableEmails(): array
     {
         try {
             $updater = app(DisposableEmailUpdater::class);
-
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update disposable emails', ['error' => $e->getMessage()]);
-
             return ['success' => false, 'error' => $e->getMessage()];
+        } finally {
+            gc_collect_cycles();
         }
     }
 
-    /**
-     * Update ASN database.
-     */
     protected function updateASN(): array
     {
         try {
             $updater = app(ASNUpdater::class);
-
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update ASN data', ['error' => $e->getMessage()]);
-
             return ['success' => false, 'error' => $e->getMessage()];
+        } finally {
+            gc_collect_cycles();
         }
     }
 
-    /**
-     * Update user agents database.
-     */
     protected function updateUserAgents(): array
     {
         try {
             $updater = app(UserAgentUpdater::class);
-
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update user agents', ['error' => $e->getMessage()]);
-
             return ['success' => false, 'error' => $e->getMessage()];
+        } finally {
+            gc_collect_cycles();
         }
     }
 
-    /**
-     * Handle a job failure.
-     */
     public function failed(\Throwable $exception): void
     {
         Log::error('Data source update job failed permanently', [
             'source' => $this->source,
             'error' => $exception->getMessage(),
+            'memory_usage' => memory_get_usage(true),
+            'peak_memory' => memory_get_peak_usage(true),
         ]);
     }
 }

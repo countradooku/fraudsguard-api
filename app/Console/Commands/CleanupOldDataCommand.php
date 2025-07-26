@@ -8,6 +8,7 @@ use App\Models\BlacklistedEmail;
 use App\Models\BlacklistedIP;
 use App\Models\BlacklistedPhone;
 use App\Models\FraudCheck;
+use App\Models\TorExitNode;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -209,7 +210,7 @@ class CleanupOldDataCommand extends Command
 
         $this->info('Cleaning Tor nodes not seen in 7 days...');
 
-        $query = \App\Models\TorExitNode::where('last_seen_at', '<', $cutoffDate)
+        $query = TorExitNode::where('last_seen_at', '<', $cutoffDate)
             ->where('is_active', false);
         $count = $query->count();
 

@@ -12,25 +12,49 @@ class TorExitNodeUpdater
     protected array $sources = [
         'torproject' => 'https://check.torproject.org/torbulkexitlist',
         'dan' => 'https://www.dan.me.uk/torlist/?exit',
-        'onionoo' => 'https://onionoo.torproject.org/details?type=relay&flag=exit',
     ];
+
+    protected int $memoryLimit;
+
+    public function __construct()
+    {
+        $memoryLimitString = ini_get('memory_limit');
+
+        if ($memoryLimitString === '-1') {
+            // Handle unlimited memory if needed, e.g., set a high default
+            // For now, we'll just avoid calculation.
+            // You might want to assign a large, but finite, number.
+            $this->memoryLimit = PHP_INT_MAX;
+        } else {
+            $memoryInBytes = $this->convertShorthandToBytes($memoryLimitString);
+            $this->memoryLimit = (int) ($memoryInBytes * 0.8);
+        }
+    }
 
     /**
      * Update Tor exit nodes from all sources.
      */
     public function updateAll(): array
     {
+        ini_set('memory_limit', '256M');
+
         $results = [];
-        $allNodes = [];
+        $totalNodes = 0;
+
+        // Mark all existing nodes as inactive
+        DB::statement('UPDATE tor_exit_nodes SET is_active = false');
 
         foreach ($this->sources as $name => $url) {
             try {
-                $nodes = $this->fetchFromSource($name, $url);
+                $count = $this->fetchAndProcessSource($name, $url);
                 $results[$name] = [
                     'success' => true,
-                    'count' => count($nodes),
+                    'count' => $count,
                 ];
-                $allNodes = array_merge($allNodes, $nodes);
+                $totalNodes += $count;
+
+                gc_collect_cycles();
+
             } catch (\Exception $e) {
                 $results[$name] = [
                     'success' => false,
@@ -42,184 +66,224 @@ class TorExitNodeUpdater
             }
         }
 
-        // Remove duplicates by IP
-        $uniqueNodes = $this->deduplicateNodes($allNodes);
+        // Fetch detailed data from Onionoo API
+        try {
+            $count = $this->fetchOnionooData();
+            $results['onionoo'] = [
+                'success' => true,
+                'count' => $count,
+            ];
+            $totalNodes += $count;
+        } catch (\Exception $e) {
+            $results['onionoo'] = [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
 
-        // Update database
-        $this->updateDatabase($uniqueNodes);
+        // Clean up old nodes
+        $this->cleanupOldNodes();
 
         return [
             'sources' => $results,
-            'total_nodes' => count($uniqueNodes),
+            'total_nodes' => $totalNodes,
         ];
     }
 
     /**
-     * Fetch nodes from a specific source.
+     * Fetch and process nodes from a simple IP list source.
      */
-    protected function fetchFromSource(string $name, string $url): array
+    protected function fetchAndProcessSource(string $name, string $url): int
     {
-        $response = Http::timeout(30)->get($url);
+        $tempFile = tempnam(sys_get_temp_dir(), "tor_nodes_{$name}_");
+        $processedCount = 0;
 
-        if (! $response->successful()) {
-            throw new \Exception('HTTP request failed with status: '.$response->status());
-        }
+        try {
+            $response = Http::timeout(30)->sink($tempFile)->get($url);
 
-        switch ($name) {
-            case 'torproject':
-                return $this->parseTorProjectList($response->body());
-            case 'dan':
-                return $this->parseDanList($response->body());
-            case 'onionoo':
-                return $this->parseOnionooData($response->json());
-            default:
-                return [];
-        }
-    }
-
-    /**
-     * Parse TorProject exit list format.
-     */
-    protected function parseTorProjectList(string $content): array
-    {
-        $nodes = [];
-        $lines = explode("\n", $content);
-
-        foreach ($lines as $line) {
-            $ip = trim($line);
-            if ($this->isValidIP($ip)) {
-                $nodes[] = [
-                    'ip' => $ip,
-                    'source' => 'torproject',
-                ];
+            if (!$response->successful()) {
+                throw new \Exception('HTTP request failed with status: ' . $response->status());
             }
-        }
 
-        return $nodes;
-    }
-
-    /**
-     * Parse dan.me.uk list format.
-     */
-    protected function parseDanList(string $content): array
-    {
-        $nodes = [];
-        $lines = explode("\n", $content);
-
-        foreach ($lines as $line) {
-            $ip = trim($line);
-            if ($this->isValidIP($ip)) {
-                $nodes[] = [
-                    'ip' => $ip,
-                    'source' => 'dan',
-                ];
+            $handle = fopen($tempFile, 'r');
+            if (!$handle) {
+                throw new \Exception('Could not open temporary file');
             }
-        }
 
-        return $nodes;
-    }
+            $batch = [];
+            $batchSize = 100;
 
-    /**
-     * Parse Onionoo API data.
-     */
-    protected function parseOnionooData(array $data): array
-    {
-        $nodes = [];
+            while (($line = fgets($handle)) !== false) {
+                $ip = trim($line);
 
-        foreach ($data['relays'] ?? [] as $relay) {
-            foreach ($relay['exit_addresses'] ?? [] as $address) {
-                $ip = explode(':', $address)[0]; // Remove port if present
-                if ($this->isValidIP($ip)) {
-                    $nodes[] = [
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    $batch[] = [
                         'ip' => $ip,
-                        'node_id' => $relay['fingerprint'] ?? null,
-                        'nickname' => $relay['nickname'] ?? null,
-                        'last_seen' => $relay['last_seen'] ?? null,
-                        'source' => 'onionoo',
+                        'source' => $name,
                     ];
+
+                    if (count($batch) >= $batchSize) {
+                        $this->processNodeBatch($batch);
+                        $processedCount += count($batch);
+                        $batch = [];
+                    }
                 }
             }
+
+            // Process remaining nodes
+            if (!empty($batch)) {
+                $this->processNodeBatch($batch);
+                $processedCount += count($batch);
+            }
+
+            fclose($handle);
+
+        } finally {
+            @unlink($tempFile);
         }
 
-        return $nodes;
+        return $processedCount;
     }
 
     /**
-     * Validate IP address.
+     * Fetch detailed data from Onionoo API with pagination.
      */
-    protected function isValidIP(string $ip): bool
+    protected function fetchOnionooData(): int
     {
-        return filter_var($ip, FILTER_VALIDATE_IP) !== false;
+        $processedCount = 0;
+        $offset = 0;
+        $limit = 1000; // Process in smaller chunks
+
+        do {
+            try {
+                $response = Http::timeout(30)->get('https://onionoo.torproject.org/details', [
+                    'type' => 'relay',
+                    'flag' => 'exit',
+                    'fields' => 'nickname,fingerprint,exit_addresses,last_seen',
+                    'offset' => $offset,
+                    'limit' => $limit,
+                ]);
+
+                if (!$response->successful()) {
+                    break;
+                }
+
+                $data = $response->json();
+                $relays = $data['relays'] ?? [];
+
+                if (empty($relays)) {
+                    break;
+                }
+
+                $batch = [];
+                foreach ($relays as $relay) {
+                    foreach ($relay['exit_addresses'] ?? [] as $address) {
+                        $ip = explode(':', $address)[0]; // Remove port if present
+                        if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                            $batch[] = [
+                                'ip' => $ip,
+                                'node_id' => $relay['fingerprint'] ?? null,
+                                'nickname' => $relay['nickname'] ?? null,
+                                'last_seen' => $relay['last_seen'] ?? null,
+                                'source' => 'onionoo',
+                            ];
+                        }
+                    }
+                }
+
+                if (!empty($batch)) {
+                    $this->processNodeBatch($batch);
+                    $processedCount += count($batch);
+                }
+
+                $offset += $limit;
+
+                // Force garbage collection every few iterations
+                if ($offset % 5000 === 0) {
+                    gc_collect_cycles();
+                }
+
+            } catch (\Exception $e) {
+                Log::error('Error fetching Onionoo data', [
+                    'offset' => $offset,
+                    'error' => $e->getMessage(),
+                ]);
+                break;
+            }
+
+        } while (count($relays) === $limit); // Continue while we get full pages
+
+        return $processedCount;
     }
 
     /**
-     * Remove duplicate nodes by IP.
+     * Process a batch of nodes.
      */
-    protected function deduplicateNodes(array $nodes): array
+    protected function processNodeBatch(array $nodes): void
     {
-        $unique = [];
-        $seen = [];
+        if (empty($nodes)) {
+            return;
+        }
+
+        $data = [];
+        $now = now();
 
         foreach ($nodes as $node) {
-            if (! isset($seen[$node['ip']])) {
-                $unique[] = $node;
-                $seen[$node['ip']] = true;
-            } elseif (! empty($node['node_id']) || ! empty($node['nickname'])) {
-                // Prefer entries with more metadata
-                $index = array_search($node['ip'], array_column($unique, 'ip'));
-                if ($index !== false && empty($unique[$index]['node_id'])) {
-                    $unique[$index] = $node;
-                }
-            }
+            $ipVersion = filter_var($node['ip'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? 'v4' : 'v6';
+
+            $data[] = [
+                'ip_address' => $node['ip'],
+                'ip_version' => $ipVersion,
+                'node_id' => $node['node_id'] ?? null,
+                'nickname' => $node['nickname'] ?? null,
+                'is_active' => true,
+                'risk_weight' => 90,
+                'last_seen_at' => isset($node['last_seen'])
+                    ? \Carbon\Carbon::parse($node['last_seen'])
+                    : $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
         }
 
-        return $unique;
+        TorExitNode::upsert(
+            $data,
+            ['ip_address'], // Unique key
+            ['ip_version', 'node_id', 'nickname', 'is_active', 'last_seen_at', 'updated_at']
+        );
+
+        unset($data);
     }
 
     /**
-     * Update database with fetched nodes.
+     * Clean up old inactive nodes.
      */
-    protected function updateDatabase(array $nodes): void
+    protected function cleanupOldNodes(): void
     {
-        DB::transaction(function () use ($nodes) {
-            // Mark all existing nodes as inactive
-            TorExitNode::query()->update(['is_active' => false]);
+        DB::statement('DELETE FROM tor_exit_nodes WHERE is_active = true AND last_seen_at < ?', [
+            now()->subDays(30)
+        ]);
+    }
 
-            // Batch upsert nodes
-            $chunks = array_chunk($nodes, 500);
+    /**
+     * Converts a shorthand byte value string (e.g., 256M, 1G) to bytes.
+     */
+    private function convertShorthandToBytes(string $shorthand): int
+    {
+        $shorthand = strtolower(trim($shorthand));
+        $value = (int) $shorthand;
 
-            foreach ($chunks as $chunk) {
-                $data = [];
+        switch (substr($shorthand, -1)) {
+            case 'g':
+                $value *= 1024;
+            // fallthrough
+            case 'm':
+                $value *= 1024;
+            // fallthrough
+            case 'k':
+                $value *= 1024;
+        }
 
-                foreach ($chunk as $node) {
-                    $ipVersion = filter_var($node['ip'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? 'v4' : 'v6';
-
-                    $data[] = [
-                        'ip_address' => $node['ip'],
-                        'ip_version' => $ipVersion,
-                        'node_id' => $node['node_id'] ?? null,
-                        'nickname' => $node['nickname'] ?? null,
-                        'is_active' => true,
-                        'risk_weight' => 90, // High risk for Tor exit nodes
-                        'last_seen_at' => isset($node['last_seen'])
-                            ? \Carbon\Carbon::parse($node['last_seen'])
-                            : now(),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-                }
-
-                TorExitNode::upsert(
-                    $data,
-                    ['ip_address'], // Unique key
-                    ['ip_version', 'node_id', 'nickname', 'is_active', 'last_seen_at', 'updated_at']
-                );
-            }
-
-            // Remove nodes not seen in 30 days
-            TorExitNode::where('is_active', false)
-                ->where('last_seen_at', '<', now()->subDays(30))
-                ->delete();
-        });
+        return $value;
     }
 }
