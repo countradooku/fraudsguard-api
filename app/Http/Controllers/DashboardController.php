@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -229,7 +229,7 @@ class DashboardController extends Controller
         $query = $user->fraudChecks()
             ->where('created_at', '>=', $startDate)
             ->select(
-                DB::raw($this->getDateGroupExpression($groupBy) . ' as date'),
+                DB::raw($this->getDateGroupExpression($groupBy).' as date'),
                 DB::raw('COUNT(*) as total'),
                 DB::raw('AVG(risk_score) as avg_risk_score'),
                 DB::raw('SUM(CASE WHEN decision = \'block\' THEN 1 ELSE 0 END) as blocked')
@@ -345,6 +345,7 @@ class DashboardController extends Controller
     {
         if ($user->subscribed('default')) {
             $subscription = $user->subscription('default')->asStripeSubscription();
+
             return [
                 Carbon::createFromTimestamp($subscription->current_period_start),
                 Carbon::createFromTimestamp($subscription->current_period_end),
@@ -363,7 +364,7 @@ class DashboardController extends Controller
      */
     protected function getStartDateForPeriod(string $period): Carbon
     {
-        return match($period) {
+        return match ($period) {
             'hour' => now()->subHour(),
             'day' => now()->subDay(),
             'week' => now()->subWeek(),
@@ -378,12 +379,12 @@ class DashboardController extends Controller
      */
     protected function getDateGroupExpression(string $groupBy): string
     {
-        return match($groupBy) {
+        return match ($groupBy) {
             'hour' => "DATE_FORMAT(created_at, '%Y-%m-%d %H:00:00')",
-            'day' => "DATE(created_at)",
-            'week' => "DATE(DATE_SUB(created_at, INTERVAL DAYOFWEEK(created_at)-1 DAY))",
+            'day' => 'DATE(created_at)',
+            'week' => 'DATE(DATE_SUB(created_at, INTERVAL DAYOFWEEK(created_at)-1 DAY))',
             'month' => "DATE_FORMAT(created_at, '%Y-%m-01')",
-            default => "DATE(created_at)",
+            default => 'DATE(created_at)',
         };
     }
 
@@ -402,16 +403,16 @@ class DashboardController extends Controller
             $alerts[] = [
                 'type' => 'rate_limit',
                 'severity' => 'warning',
-                'message' => 'Approaching rate limit (' . round(($hourlyUsage / $rateLimit) * 100) . '% used)',
+                'message' => 'Approaching rate limit ('.round(($hourlyUsage / $rateLimit) * 100).'% used)',
             ];
         }
 
         // Check if free tier is running out
-        if (!$user->subscribed('default') && $user->free_checks_remaining < 20) {
+        if (! $user->subscribed('default') && $user->free_checks_remaining < 20) {
             $alerts[] = [
                 'type' => 'free_tier',
                 'severity' => 'info',
-                'message' => 'Only ' . $user->free_checks_remaining . ' free checks remaining',
+                'message' => 'Only '.$user->free_checks_remaining.' free checks remaining',
             ];
         }
 
@@ -425,7 +426,7 @@ class DashboardController extends Controller
             $alerts[] = [
                 'type' => 'high_risk',
                 'severity' => 'error',
-                'message' => $recentHighRisk . ' high-risk detections in the last hour',
+                'message' => $recentHighRisk.' high-risk detections in the last hour',
             ];
         }
 

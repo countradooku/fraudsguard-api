@@ -3,8 +3,8 @@
 namespace App\Services\FraudDetection\DataSources;
 
 use App\Models\TorExitNode;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class TorExitNodeUpdater
@@ -61,8 +61,8 @@ class TorExitNodeUpdater
     {
         $response = Http::timeout(30)->get($url);
 
-        if (!$response->successful()) {
-            throw new \Exception("HTTP request failed with status: " . $response->status());
+        if (! $response->successful()) {
+            throw new \Exception('HTTP request failed with status: '.$response->status());
         }
 
         switch ($name) {
@@ -161,10 +161,10 @@ class TorExitNodeUpdater
         $seen = [];
 
         foreach ($nodes as $node) {
-            if (!isset($seen[$node['ip']])) {
+            if (! isset($seen[$node['ip']])) {
                 $unique[] = $node;
                 $seen[$node['ip']] = true;
-            } elseif (!empty($node['node_id']) || !empty($node['nickname'])) {
+            } elseif (! empty($node['node_id']) || ! empty($node['nickname'])) {
                 // Prefer entries with more metadata
                 $index = array_search($node['ip'], array_column($unique, 'ip'));
                 if ($index !== false && empty($unique[$index]['node_id'])) {

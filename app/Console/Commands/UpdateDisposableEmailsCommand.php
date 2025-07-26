@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\DisposableEmailDomain;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -35,8 +36,8 @@ class UpdateDisposableEmailsCommand extends Command
 
         // Check if recently updated (unless forced)
         if (! $this->option('force')) {
-            $lastUpdate = DisposableEmailDomain::max('updated_at');
-            if ($lastUpdate && $lastUpdate->diffInHours(now()) < 24) {
+            $lastUpdate = Carbon::parse(DisposableEmailDomain::max('updated_at'));
+            if ($lastUpdate->diffInHours(now()) < 24) {
                 $this->info('Disposable domains were recently updated. Use --force to update anyway.');
 
                 return 0;

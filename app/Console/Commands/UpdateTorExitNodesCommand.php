@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\TorExitNode;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -35,7 +36,7 @@ class UpdateTorExitNodesCommand extends Command
 
         // Check if recently updated (unless forced)
         if (! $this->option('force')) {
-            $lastUpdate = TorExitNode::max('updated_at');
+            $lastUpdate = Carbon::parse(TorExitNode::max('updated_at'));
             if ($lastUpdate && $lastUpdate->diffInHours(now()) < 6) {
                 $this->info('Tor nodes were recently updated. Use --force to update anyway.');
 

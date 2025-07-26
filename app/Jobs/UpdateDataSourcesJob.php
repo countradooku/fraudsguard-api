@@ -28,6 +28,7 @@ class UpdateDataSourcesJob implements ShouldQueue
     public int $timeout = 600; // 10 minutes
 
     protected string $source;
+
     protected bool $force;
 
     /**
@@ -97,9 +98,11 @@ class UpdateDataSourcesJob implements ShouldQueue
     {
         try {
             $updater = app(TorExitNodeUpdater::class);
+
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update Tor nodes', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -111,9 +114,11 @@ class UpdateDataSourcesJob implements ShouldQueue
     {
         try {
             $updater = app(DisposableEmailUpdater::class);
+
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update disposable emails', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -125,9 +130,11 @@ class UpdateDataSourcesJob implements ShouldQueue
     {
         try {
             $updater = app(ASNUpdater::class);
+
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update ASN data', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -139,9 +146,11 @@ class UpdateDataSourcesJob implements ShouldQueue
     {
         try {
             $updater = app(UserAgentUpdater::class);
+
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update user agents', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }

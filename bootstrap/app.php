@@ -1,10 +1,10 @@
 <?php
 
+use App\Http\Middleware\LogApiUsageMiddleware;
 use App\Models\ApiKey;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use \Illuminate\Support\Facades\Schedule;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,21 +20,20 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'api.auth' => \App\Http\Middleware\ApiAuthenticationMiddleware::class,
             'check.subscription' => \App\Http\Middleware\CheckSubscriptionMiddleware::class,
-            'log.api.usage' => \App\Http\Middleware\LogApiUsageMiddleware::class,
+            'log.api.usage' => LogApiUsageMiddleware::class,
             'webhook.verify' => \App\Http\Middleware\VerifyWebhookSignatureMiddleware::class,
         ]);
 
         // Apply middleware to API routes
         $middleware->api(append: [
-            \App\Http\Middleware\LogApiUsageMiddleware::class,
+            LogApiUsageMiddleware::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [
             'api/*',
         ]);
     })
-    ->withExceptions(function (Exceptions $exceptions): void {
-    })
+    ->withExceptions(function (Exceptions $exceptions): void {})
     ->withSchedule(function ($schedule): void {
         $schedule->command('fraud:update-tor-nodes')
             ->everyFourHours()

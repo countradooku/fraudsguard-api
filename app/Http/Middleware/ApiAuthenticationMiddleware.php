@@ -14,12 +14,12 @@ class ApiAuthenticationMiddleware
      *
      * @return mixed
      */
-    public function handle(Request $request, Closure $next, ?string $permission = null)
+    public function handle(Request $request, Closure $next, ?string $permission = null): mixed
     {
         $apiKeyString = $this->extractApiKey($request);
         $apiSecret = $this->extractApiSecret($request);
 
-        if (!$apiKeyString || !$apiSecret) {
+        if (! $apiKeyString || ! $apiSecret) {
             return response()->json([
                 'success' => false,
                 'error' => 'API key and secret are required',
@@ -30,7 +30,7 @@ class ApiAuthenticationMiddleware
         // Get API key from cache or database
         $apiKey = $this->getApiKey($apiKeyString);
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return response()->json([
                 'success' => false,
                 'error' => 'Invalid API key',
@@ -38,7 +38,7 @@ class ApiAuthenticationMiddleware
         }
 
         // Verify secret
-        if (!$apiKey->verifySecret($apiSecret)) {
+        if (! $apiKey->verifySecret($apiSecret)) {
             return response()->json([
                 'success' => false,
                 'error' => 'Invalid API secret',
@@ -46,8 +46,9 @@ class ApiAuthenticationMiddleware
         }
 
         // Check if API key is valid
-        if (!$apiKey->isValid()) {
-            $reason = !$apiKey->is_active ? 'inactive' : 'expired';
+        if (! $apiKey->isValid()) {
+            $reason = ! $apiKey->is_active ? 'inactive' : 'expired';
+
             return response()->json([
                 'success' => false,
                 'error' => "API key is {$reason}",
@@ -55,7 +56,7 @@ class ApiAuthenticationMiddleware
         }
 
         // Check permission if specified
-        if ($permission && !$apiKey->hasPermission($permission)) {
+        if ($permission && ! $apiKey->hasPermission($permission)) {
             return response()->json([
                 'success' => false,
                 'error' => 'Insufficient permissions',
@@ -67,7 +68,7 @@ class ApiAuthenticationMiddleware
         $apiKey->load('user');
 
         // Check if user account is active
-        if (!$apiKey->user) {
+        if (! $apiKey->user) {
             return response()->json([
                 'success' => false,
                 'error' => 'Associated user account not found',
@@ -78,7 +79,12 @@ class ApiAuthenticationMiddleware
         $apiKey->markAsUsed();
 
         // Add to request for use in controllers
-        $request->merge(['apiKey' => $apiKey]);
+        \request()->request->add([
+            'apiKey' => $apiKey,
+            'user' => $apiKey->user,
+            'api_key_string' => $apiKeyString,
+            'api_secret' => $apiSecret,
+        ]);
         $request->setUserResolver(function () use ($apiKey) {
             return $apiKey->user;
         });

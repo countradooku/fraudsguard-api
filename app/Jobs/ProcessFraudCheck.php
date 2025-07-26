@@ -4,9 +4,7 @@ namespace App\Jobs;
 
 use App\Events\FraudCheckPerformedEvent;
 use App\Services\FraudDetection\FraudDetectionService;
-use App\Events\FraudCheckPerformed;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -32,7 +30,9 @@ class ProcessFraudCheck implements ShouldQueue
     public $timeout = 30;
 
     protected array $data;
+
     protected $user;
+
     protected $apiKey;
 
     /**

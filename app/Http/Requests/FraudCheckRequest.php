@@ -80,17 +80,4 @@ class FraudCheckRequest extends FormRequest
             abort(422, 'At least one parameter (email, ip, credit_card, or phone) must be provided');
         }
     }
-
-    /**
-     * Handle a passed validation attempt.
-     */
-    protected function passedValidation(): void
-    {
-        // Remove empty values
-        $data = array_filter($this->validated(), function ($value) {
-            return ! is_null($value) && $value !== '';
-        });
-
-        $this->replace($data);
-    }
 }

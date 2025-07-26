@@ -3,8 +3,8 @@
 namespace App\Services\FraudDetection\DataSources;
 
 use App\Models\DisposableEmailDomain;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -62,7 +62,7 @@ class DisposableEmailUpdater
 
         // Also check for local custom list
         $customDomains = $this->loadCustomDomains();
-        if (!empty($customDomains)) {
+        if (! empty($customDomains)) {
             $allDomains = array_merge($allDomains, $customDomains);
             $results['custom'] = [
                 'success' => true,
@@ -96,8 +96,8 @@ class DisposableEmailUpdater
     {
         $response = Http::timeout(30)->get($config['url']);
 
-        if (!$response->successful()) {
-            throw new \Exception("HTTP request failed with status: " . $response->status());
+        if (! $response->successful()) {
+            throw new \Exception('HTTP request failed with status: '.$response->status());
         }
 
         switch ($config['format']) {
@@ -131,7 +131,7 @@ class DisposableEmailUpdater
                 $domain = trim(substr($domain, 0, $pos));
             }
 
-            if (!empty($domain)) {
+            if (! empty($domain)) {
                 $domains[] = strtolower($domain);
             }
         }
@@ -144,7 +144,7 @@ class DisposableEmailUpdater
      */
     protected function parseJsonFormat($data): array
     {
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             return [];
         }
 
@@ -158,11 +158,12 @@ class DisposableEmailUpdater
     {
         $path = 'fraud-detection/custom-disposable-domains.txt';
 
-        if (!Storage::exists($path)) {
+        if (! Storage::exists($path)) {
             return [];
         }
 
         $content = Storage::get($path);
+
         return $this->parseTextFormat($content);
     }
 
@@ -215,7 +216,7 @@ class DisposableEmailUpdater
     protected function isValidDomain(string $domain): bool
     {
         // Basic domain validation
-        if (!preg_match('/^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i', $domain)) {
+        if (! preg_match('/^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i', $domain)) {
             return false;
         }
 
@@ -227,7 +228,7 @@ class DisposableEmailUpdater
         // Validate TLD
         $parts = explode('.', $domain);
         $tld = end($parts);
-        if (strlen($tld) < 2 || !ctype_alpha($tld)) {
+        if (strlen($tld) < 2 || ! ctype_alpha($tld)) {
             return false;
         }
 
@@ -308,8 +309,8 @@ class DisposableEmailUpdater
     protected function saveCombinedList(array $domains): void
     {
         $content = "# Disposable Email Domains\n";
-        $content .= "# Generated: " . now()->toDateTimeString() . "\n";
-        $content .= "# Total domains: " . count($domains) . "\n\n";
+        $content .= '# Generated: '.now()->toDateTimeString()."\n";
+        $content .= '# Total domains: '.count($domains)."\n\n";
 
         sort($domains);
         $content .= implode("\n", $domains);

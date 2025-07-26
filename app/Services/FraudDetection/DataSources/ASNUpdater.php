@@ -3,10 +3,9 @@
 namespace App\Services\FraudDetection\DataSources;
 
 use App\Models\ASN;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 class ASNUpdater
 {
@@ -91,8 +90,8 @@ class ASNUpdater
 
         $response = Http::timeout(60)->get($config['url']);
 
-        if (!$response->successful()) {
-            throw new \Exception("HTTP request failed with status: " . $response->status());
+        if (! $response->successful()) {
+            throw new \Exception('HTTP request failed with status: '.$response->status());
         }
 
         switch ($config['format']) {
@@ -116,8 +115,8 @@ class ASNUpdater
             // Download file
             $response = Http::timeout(120)->sink($tempFile)->get($url);
 
-            if (!$response->successful()) {
-                throw new \Exception("Failed to download file");
+            if (! $response->successful()) {
+                throw new \Exception('Failed to download file');
             }
 
             // Decompress
@@ -125,7 +124,7 @@ class ASNUpdater
             if (str_ends_with($url, '.gz')) {
                 $content = gzdecode(file_get_contents($tempFile));
             } elseif (str_ends_with($url, '.zip')) {
-                $zip = new \ZipArchive();
+                $zip = new \ZipArchive;
                 if ($zip->open($tempFile) === true) {
                     $content = $zip->getFromIndex(0);
                     $zip->close();
@@ -190,7 +189,7 @@ class ASNUpdater
                 $country = $parts[3];
                 $organization = $parts[4];
 
-                if (!isset($asnData[$asn])) {
+                if (! isset($asnData[$asn])) {
                     $asnData[$asn] = [
                         'asn' => $asn,
                         'country_code' => $country,
@@ -200,7 +199,7 @@ class ASNUpdater
                 }
 
                 // Add IP range
-                $asnData[$asn]['ip_ranges'][] = $parts[0] . '/' . $this->calculateCidr($parts[0], $parts[1]);
+                $asnData[$asn]['ip_ranges'][] = $parts[0].'/'.$this->calculateCidr($parts[0], $parts[1]);
             }
         }
 
@@ -220,6 +219,7 @@ class ASNUpdater
         }
 
         $diff = $end - $start + 1;
+
         return 32 - (int) log($diff, 2);
     }
 
@@ -233,17 +233,17 @@ class ASNUpdater
         foreach ($allAsns as $asn) {
             $key = $asn['asn'];
 
-            if (!isset($merged[$key])) {
+            if (! isset($merged[$key])) {
                 $merged[$key] = $asn;
             } else {
                 // Merge data, preferring non-empty values
-                if (empty($merged[$key]['organization']) && !empty($asn['organization'])) {
+                if (empty($merged[$key]['organization']) && ! empty($asn['organization'])) {
                     $merged[$key]['organization'] = $asn['organization'];
                 }
-                if (empty($merged[$key]['country_code']) && !empty($asn['country_code'])) {
+                if (empty($merged[$key]['country_code']) && ! empty($asn['country_code'])) {
                     $merged[$key]['country_code'] = $asn['country_code'];
                 }
-                if (!empty($asn['ip_ranges'])) {
+                if (! empty($asn['ip_ranges'])) {
                     $merged[$key]['ip_ranges'] = array_merge(
                         $merged[$key]['ip_ranges'] ?? [],
                         $asn['ip_ranges']
@@ -342,6 +342,7 @@ class ASNUpdater
                 return true;
             }
         }
+
         return false;
     }
 
@@ -412,7 +413,7 @@ class ASNUpdater
                         'is_hosting' => $asn['is_hosting'],
                         'is_vpn' => $asn['is_vpn'],
                         'is_proxy' => $asn['is_proxy'] ?? false,
-                        'ip_ranges' => !empty($asn['ip_ranges']) ? json_encode($asn['ip_ranges']) : null,
+                        'ip_ranges' => ! empty($asn['ip_ranges']) ? json_encode($asn['ip_ranges']) : null,
                         'verified_at' => now(),
                         'created_at' => now(),
                         'updated_at' => now(),

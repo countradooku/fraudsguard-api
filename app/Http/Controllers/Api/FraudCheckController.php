@@ -69,6 +69,7 @@ class FraudCheckController extends Controller
     public function check(FraudCheckRequest $request): JsonResponse
     {
         $apiKey = $request->apiKey;
+
         $user = $apiKey->user;
 
         // Check rate limit

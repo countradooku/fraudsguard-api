@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ApiKeyController;
 use App\Http\Controllers\Api\FraudCheckController;
 use App\Http\Controllers\Api\UsageController;
+use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Stripe webhooks (no auth required)
-Route::post('/stripe/webhook', [\App\Http\Controllers\Api\WebhookController::class, 'handleWebhook'])
+Route::post('/stripe/webhook', [WebhookController::class, 'handleWebhook'])
     ->middleware('webhook.verify');
 
 // Public endpoints
@@ -29,12 +30,12 @@ Route::prefix('v1')->group(function () {
     });
 
     // API endpoints requiring authentication
-    Route::middleware(['guest'])->group(function () {
+    Route::middleware(['api.auth'])->group(function () {
 
         // Fraud detection endpoints
         Route::prefix('fraud')->group(function () {
-            Route::post('/check', [FraudCheckController::class, 'check']);
-                //->middleware('throttle:fraud-check');
+            Route::post('/check', [FraudCheckController::class, 'check'])->middleware('throttle:fraud-check');
+            //
             Route::get('/check/{id}', [FraudCheckController::class, 'show']);
             Route::get('/checks', [FraudCheckController::class, 'index']);
         });

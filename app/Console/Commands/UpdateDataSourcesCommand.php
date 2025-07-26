@@ -25,14 +25,16 @@ class UpdateDataSourcesCommand extends Command
      */
     public function handle(): int
     {
+        ini_set('memory_limit', '1024M');
         $source = $this->argument('source');
         $force = $this->option('force');
         $sync = $this->option('sync');
 
         // Validate source
         $validSources = ['all', 'tor', 'disposable_emails', 'asn', 'user_agents'];
-        if (!in_array($source, $validSources)) {
-            $this->error('Invalid source. Valid sources: ' . implode(', ', $validSources));
+        if (! in_array($source, $validSources)) {
+            $this->error('Invalid source. Valid sources: '.implode(', ', $validSources));
+
             return 1;
         }
 
@@ -45,15 +47,18 @@ class UpdateDataSourcesCommand extends Command
                 $job->handle();
 
                 $this->info('Data source update completed successfully');
+
                 return 0;
             } catch (\Exception $e) {
-                $this->error('Data source update failed: ' . $e->getMessage());
+                $this->error('Data source update failed: '.$e->getMessage());
+
                 return 1;
             }
         } else {
             // Queue the job
             UpdateDataSourcesJob::dispatch($source, $force);
             $this->info('Data source update job queued');
+
             return 0;
         }
     }

@@ -119,7 +119,7 @@ class UpdateUserRequest extends FormRequest
         // Remove null values from notification preferences
         if ($this->has('notification_preferences')) {
             $this->merge([
-                'notification_preferences' => array_filter($this->notification_preferences)
+                'notification_preferences' => array_filter($this->notification_preferences),
             ]);
         }
     }

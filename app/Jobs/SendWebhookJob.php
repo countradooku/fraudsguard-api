@@ -25,8 +25,11 @@ class SendWebhookJob implements ShouldQueue
     public array $backoff = [10, 30, 60];
 
     protected array $payload;
+
     protected string $url;
+
     protected ?string $secret;
+
     protected array $metadata;
 
     /**

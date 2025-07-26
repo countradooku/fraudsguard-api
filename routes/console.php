@@ -15,16 +15,16 @@ Artisan::command('inspire', function () {
 Artisan::command('fraud:test-webhook {url} {--secret=}', function ($url, $secret = null) {
     $webhookService = app(\App\Services\WebhookService::class);
 
-    $this->info('Testing webhook: ' . $url);
+    $this->info('Testing webhook: '.$url);
 
     $result = $webhookService->test($url, $secret);
 
     if ($result['success']) {
         $this->info('✅ Webhook test successful');
-        $this->line('Status: ' . $result['status_code']);
+        $this->line('Status: '.$result['status_code']);
     } else {
         $this->error('❌ Webhook test failed');
-        $this->line('Error: ' . $result['error']);
+        $this->line('Error: '.$result['error']);
     }
 })->purpose('Test a webhook endpoint');
 
@@ -37,7 +37,7 @@ Artisan::command('fraud:stats', function () {
         ['Total Fraud Checks', number_format($totalChecks)],
         ['High Risk Checks', number_format($highRiskChecks)],
         ['Average Risk Score', round($avgRiskScore, 2)],
-        ['High Risk %', $totalChecks > 0 ? round(($highRiskChecks / $totalChecks) * 100, 2) . '%' : '0%'],
+        ['High Risk %', $totalChecks > 0 ? round(($highRiskChecks / $totalChecks) * 100, 2).'%' : '0%'],
     ]);
 
     // Data source stats

@@ -3,8 +3,8 @@
 namespace App\Services\FraudDetection\DataSources;
 
 use App\Models\KnownUserAgent;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class UserAgentUpdater
@@ -111,8 +111,8 @@ class UserAgentUpdater
     {
         $response = Http::timeout(30)->get($config['url']);
 
-        if (!$response->successful()) {
-            throw new \Exception("HTTP request failed with status: " . $response->status());
+        if (! $response->successful()) {
+            throw new \Exception('HTTP request failed with status: '.$response->status());
         }
 
         switch ($config['format']) {
@@ -229,22 +229,22 @@ class UserAgentUpdater
             }
 
             // Determine risk weight if not already set
-            if (!isset($ua['risk_weight'])) {
+            if (! isset($ua['risk_weight'])) {
                 $ua['risk_weight'] = $this->calculateRiskWeight($ua);
             }
 
             // Parse version if not set
-            if (!isset($ua['version']) && $ua['type'] === 'browser') {
+            if (! isset($ua['version']) && $ua['type'] === 'browser') {
                 $ua['version'] = $this->extractVersion($ua['user_agent']);
             }
 
             // Check if outdated
-            if (!isset($ua['is_outdated'])) {
+            if (! isset($ua['is_outdated'])) {
                 $ua['is_outdated'] = $this->isOutdated($ua);
             }
 
             // Set EOL date for known outdated software
-            if ($ua['is_outdated'] && !isset($ua['eol_date'])) {
+            if ($ua['is_outdated'] && ! isset($ua['eol_date'])) {
                 $ua['eol_date'] = $this->getEolDate($ua);
             }
 
