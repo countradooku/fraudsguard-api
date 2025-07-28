@@ -101,12 +101,12 @@ class TorExitNodeUpdater
         try {
             $response = Http::timeout(30)->sink($tempFile)->get($url);
 
-            if (!$response->successful()) {
-                throw new \Exception('HTTP request failed with status: ' . $response->status());
+            if (! $response->successful()) {
+                throw new \Exception('HTTP request failed with status: '.$response->status());
             }
 
             $handle = fopen($tempFile, 'r');
-            if (!$handle) {
+            if (! $handle) {
                 throw new \Exception('Could not open temporary file');
             }
 
@@ -131,7 +131,7 @@ class TorExitNodeUpdater
             }
 
             // Process remaining nodes
-            if (!empty($batch)) {
+            if (! empty($batch)) {
                 $this->processNodeBatch($batch);
                 $processedCount += count($batch);
             }
@@ -164,7 +164,7 @@ class TorExitNodeUpdater
                     'limit' => $limit,
                 ]);
 
-                if (!$response->successful()) {
+                if (! $response->successful()) {
                     break;
                 }
 
@@ -191,7 +191,7 @@ class TorExitNodeUpdater
                     }
                 }
 
-                if (!empty($batch)) {
+                if (! empty($batch)) {
                     $this->processNodeBatch($batch);
                     $processedCount += count($batch);
                 }
@@ -261,7 +261,7 @@ class TorExitNodeUpdater
     protected function cleanupOldNodes(): void
     {
         DB::statement('DELETE FROM tor_exit_nodes WHERE is_active = true AND last_seen_at < ?', [
-            now()->subDays(30)
+            now()->subDays(30),
         ]);
     }
 
@@ -276,10 +276,10 @@ class TorExitNodeUpdater
         switch (substr($shorthand, -1)) {
             case 'g':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'm':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'k':
                 $value *= 1024;
         }

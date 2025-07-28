@@ -3,7 +3,6 @@
 namespace App\Services\FraudDetection\DataSources;
 
 use App\Models\KnownUserAgent;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -84,6 +83,7 @@ class UserAgentUpdater
     ];
 
     protected int $memoryLimit;
+
     protected int $batchSize = 500;
 
     public function __construct()
@@ -172,8 +172,8 @@ class UserAgentUpdater
     {
         $response = Http::timeout(30)->get($config['url']);
 
-        if (!$response->successful()) {
-            throw new \Exception('HTTP request failed with status: ' . $response->status());
+        if (! $response->successful()) {
+            throw new \Exception('HTTP request failed with status: '.$response->status());
         }
 
         $processedCount = 0;
@@ -241,7 +241,7 @@ class UserAgentUpdater
         }
 
         // Process remaining user agents
-        if (!empty($batch)) {
+        if (! empty($batch)) {
             $this->processUserAgentBatch($batch);
             $processedCount += count($batch);
         }
@@ -261,7 +261,7 @@ class UserAgentUpdater
         foreach ($lines as $line) {
             $userAgent = trim($line);
 
-            if (!empty($userAgent) && !str_starts_with($userAgent, '#') && strlen($userAgent) > 10) {
+            if (! empty($userAgent) && ! str_starts_with($userAgent, '#') && strlen($userAgent) > 10) {
                 $batch[] = [
                     'user_agent' => $userAgent,
                     'type' => $config['type'] ?? 'unknown',
@@ -278,7 +278,7 @@ class UserAgentUpdater
         }
 
         // Process remaining user agents
-        if (!empty($batch)) {
+        if (! empty($batch)) {
             $this->processUserAgentBatch($batch);
             $processedCount += count($batch);
         }
@@ -366,17 +366,17 @@ class UserAgentUpdater
             $hash = hash('sha256', $userAgentString);
 
             // Classify if not already classified
-            if (!isset($ua['risk_weight'])) {
+            if (! isset($ua['risk_weight'])) {
                 $ua['risk_weight'] = $this->calculateRiskWeight($ua);
             }
 
             // Extract version if not set
-            if (!isset($ua['version']) && $ua['type'] === 'browser') {
+            if (! isset($ua['version']) && $ua['type'] === 'browser') {
                 $ua['version'] = $this->extractVersion($userAgentString);
             }
 
             // Check if outdated
-            if (!isset($ua['is_outdated'])) {
+            if (! isset($ua['is_outdated'])) {
                 $ua['is_outdated'] = $this->isOutdated($ua);
             }
 
@@ -491,10 +491,10 @@ class UserAgentUpdater
         switch (substr($shorthand, -1)) {
             case 'g':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'm':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'k':
                 $value *= 1024;
         }

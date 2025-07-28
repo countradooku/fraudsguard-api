@@ -6,6 +6,7 @@ use App\Events\FraudCheckPerformedEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\FraudCheckRequest;
 use App\Services\FraudDetection\FraudDetectionService;
+use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -73,7 +74,7 @@ class FraudCheckController extends Controller
         $user = $apiKey->user;
 
         // Check rate limit
-        $rateLimitKey = "fraud-check:{$apiKey->id}";
+        $rateLimitKey = "fraud-check:$apiKey->id";
         $maxAttempts = $apiKey->rate_limit;
 
         if (! RateLimiter::attempt($rateLimitKey, $maxAttempts, function () {}, 3600)) {
@@ -128,7 +129,7 @@ class FraudCheckController extends Controller
                 ],
             ]);
 
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return response()->json([
                 'success' => false,
                 'error' => 'An error occurred during fraud check',
@@ -196,17 +197,14 @@ class FraudCheckController extends Controller
      */
     protected function formatChecks(array $checks): array
     {
-        $formatted = [];
 
-        foreach ($checks as $name => $result) {
-            $formatted[$name] = [
+        return array_map(function ($result) {
+            return [
                 'passed' => $result['passed'],
                 'score' => $result['score'],
                 'details' => $this->sanitizeDetails($result['details'] ?? []),
             ];
-        }
-
-        return $formatted;
+        }, $checks);
     }
 
     /**

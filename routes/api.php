@@ -35,6 +35,7 @@ Route::prefix('v1')->group(function () {
         // Fraud detection endpoints
         Route::prefix('fraud')->group(function () {
             Route::post('/check', [FraudCheckController::class, 'check'])->middleware('throttle:fraud-check');
+
             //
             Route::get('/check/{id}', [FraudCheckController::class, 'show']);
             Route::get('/checks', [FraudCheckController::class, 'index']);

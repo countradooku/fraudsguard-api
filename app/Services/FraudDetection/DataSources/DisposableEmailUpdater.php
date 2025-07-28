@@ -26,6 +26,7 @@ class DisposableEmailUpdater
     ];
 
     protected int $chunkSize = 1000;
+
     protected int $memoryLimit;
 
     public function __construct()
@@ -127,13 +128,13 @@ class DisposableEmailUpdater
             // Download to temporary file to avoid keeping large response in memory
             $response = Http::timeout(30)->sink($tempFile)->get($config['url']);
 
-            if (!$response->successful()) {
-                throw new \Exception('HTTP request failed with status: ' . $response->status());
+            if (! $response->successful()) {
+                throw new \Exception('HTTP request failed with status: '.$response->status());
             }
 
             // Process file line by line
             $handle = fopen($tempFile, 'r');
-            if (!$handle) {
+            if (! $handle) {
                 throw new \Exception('Could not open temporary file');
             }
 
@@ -160,7 +161,7 @@ class DisposableEmailUpdater
             }
 
             // Process remaining domains
-            if (!empty($batch)) {
+            if (! empty($batch)) {
                 $this->processBatch($batch);
                 $processedCount += count($batch);
             }
@@ -240,7 +241,7 @@ class DisposableEmailUpdater
         }
 
         // Basic domain validation
-        if (!preg_match('/^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i', $domain)) {
+        if (! preg_match('/^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i', $domain)) {
             return false;
         }
 
@@ -259,7 +260,7 @@ class DisposableEmailUpdater
     {
         $path = 'fraud-detection/custom-disposable-domains.txt';
 
-        if (!Storage::exists($path)) {
+        if (! Storage::exists($path)) {
             return 0;
         }
 
@@ -270,7 +271,7 @@ class DisposableEmailUpdater
 
         try {
             $handle = fopen($tempFile, 'r');
-            if (!$handle) {
+            if (! $handle) {
                 return 0;
             }
 
@@ -292,7 +293,7 @@ class DisposableEmailUpdater
             }
 
             // Process remaining domains
-            if (!empty($batch)) {
+            if (! empty($batch)) {
                 $this->processBatch($batch);
                 $processedCount += count($batch);
             }
@@ -338,7 +339,7 @@ class DisposableEmailUpdater
     protected function cleanupOldDomains(): void
     {
         DB::statement('DELETE FROM disposable_email_domains WHERE is_active = false AND updated_at < ?', [
-            now()->subDays(7)
+            now()->subDays(7),
         ]);
     }
 
@@ -353,10 +354,10 @@ class DisposableEmailUpdater
         switch (substr($shorthand, -1)) {
             case 'g':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'm':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'k':
                 $value *= 1024;
         }

@@ -18,10 +18,13 @@ class UpdateDataSourcesJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2; // Reduced tries
+
     public int $timeout = 1200; // 20 minutes
+
     public int $memory = 512; // 512MB memory limit
 
     protected string $source;
+
     protected bool $force;
 
     public function __construct(string $source = 'all', bool $force = false)
@@ -102,9 +105,11 @@ class UpdateDataSourcesJob implements ShouldQueue
     {
         try {
             $updater = app(TorExitNodeUpdater::class);
+
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update Tor nodes', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'error' => $e->getMessage()];
         } finally {
             gc_collect_cycles();
@@ -115,9 +120,11 @@ class UpdateDataSourcesJob implements ShouldQueue
     {
         try {
             $updater = app(DisposableEmailUpdater::class);
+
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update disposable emails', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'error' => $e->getMessage()];
         } finally {
             gc_collect_cycles();
@@ -128,9 +135,11 @@ class UpdateDataSourcesJob implements ShouldQueue
     {
         try {
             $updater = app(ASNUpdater::class);
+
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update ASN data', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'error' => $e->getMessage()];
         } finally {
             gc_collect_cycles();
@@ -141,9 +150,11 @@ class UpdateDataSourcesJob implements ShouldQueue
     {
         try {
             $updater = app(UserAgentUpdater::class);
+
             return $updater->updateAll();
         } catch (\Exception $e) {
             Log::error('Failed to update user agents', ['error' => $e->getMessage()]);
+
             return ['success' => false, 'error' => $e->getMessage()];
         } finally {
             gc_collect_cycles();

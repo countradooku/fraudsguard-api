@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -56,14 +58,14 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureRateLimiting(): void
     {
-        \Illuminate\Support\Facades\RateLimiter::for('fraud-check', function ($request) {
+        RateLimiter::for('fraud-check', function ($request) {
             $apiKey = $request->apiKey;
 
-            if (! $apiKey) {
-                return \Illuminate\Cache\RateLimiting\Limit::perHour(10);
+            if (!$apiKey) {
+                return Limit::perHour(10);
             }
 
-            return \Illuminate\Cache\RateLimiting\Limit::perHour($apiKey->rate_limit)
+            return Limit::perHour($apiKey->rate_limit)
                 ->by($apiKey->id);
         });
     }

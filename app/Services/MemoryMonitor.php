@@ -7,7 +7,9 @@ use Illuminate\Support\Facades\Log;
 class MemoryMonitor
 {
     protected int $memoryLimit;
+
     protected int $warningThreshold;
+
     protected int $lastLoggedUsage = 0;
 
     public function __construct()
@@ -73,10 +75,10 @@ class MemoryMonitor
         switch ($last) {
             case 'g':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'm':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'k':
                 $value *= 1024;
         }
@@ -111,6 +113,6 @@ class MemoryMonitor
             $size /= 1024;
         }
 
-        return round($size, $precision) . ' ' . $units[$i];
+        return round($size, $precision).' '.$units[$i];
     }
 }

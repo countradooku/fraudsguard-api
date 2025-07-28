@@ -27,7 +27,7 @@ class UserAgentCheck implements CheckInterface
 
     public function applicable(array $data): bool
     {
-        return !empty($data['user_agent']);
+        return ! empty($data['user_agent']);
     }
 
     public function perform(array $data): array
@@ -119,7 +119,7 @@ class UserAgentCheck implements CheckInterface
             foreach ($this->suspiciousPatterns as $type => $patterns) {
                 foreach ($patterns as $pattern) {
                     if (str_contains(strtolower($userAgent), $pattern)) {
-                        $riskScore = match($type) {
+                        $riskScore = match ($type) {
                             'malicious' => 90,
                             'bot' => 60,
                             'automation' => 70,
@@ -212,6 +212,7 @@ class UserAgentCheck implements CheckInterface
         $browserInfo['is_mobile'] = $isMobile;
 
         $browserInfo['risk_score'] = $riskScore;
+
         return $browserInfo;
     }
 
@@ -237,7 +238,7 @@ class UserAgentCheck implements CheckInterface
             str_contains(strtolower($userAgent), 'webkit') ||
             str_contains(strtolower($userAgent), 'gecko');
 
-        if (!$hasCommonIndicators) {
+        if (! $hasCommonIndicators) {
             $characteristics[] = 'missing_common_indicators';
             $riskScore += 25;
         }
@@ -259,7 +260,7 @@ class UserAgentCheck implements CheckInterface
         }
 
         // Invalid format
-        if (!preg_match('/^[a-zA-Z0-9\s\(\)\[\]\/\.,;:_\-\+]+$/', $userAgent)) {
+        if (! preg_match('/^[a-zA-Z0-9\s\(\)\[\]\/\.,;:_\-\+]+$/', $userAgent)) {
             $characteristics[] = 'invalid_characters';
             $riskScore += 50;
         }
@@ -294,6 +295,7 @@ class UserAgentCheck implements CheckInterface
         }
 
         $details['risk_score'] = $riskScore;
+
         return $details;
     }
 
@@ -304,6 +306,7 @@ class UserAgentCheck implements CheckInterface
                 return true;
             }
         }
+
         return false;
     }
 }

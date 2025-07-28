@@ -3,7 +3,6 @@
 namespace App\Services\FraudDetection\DataSources;
 
 use App\Models\ASN;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -34,6 +33,7 @@ class ASNUpdater
     ];
 
     protected int $memoryLimit;
+
     protected int $batchSize = 500;
 
     public function __construct()
@@ -120,13 +120,13 @@ class ASNUpdater
             // Download to temporary file
             $response = Http::timeout(120)->sink($tempFile)->get($config['url']);
 
-            if (!$response->successful()) {
-                throw new \Exception('HTTP request failed with status: ' . $response->status());
+            if (! $response->successful()) {
+                throw new \Exception('HTTP request failed with status: '.$response->status());
             }
 
             // Process file line by line
             $handle = fopen($tempFile, 'r');
-            if (!$handle) {
+            if (! $handle) {
                 throw new \Exception('Could not open temporary file');
             }
 
@@ -164,7 +164,7 @@ class ASNUpdater
             }
 
             // Process remaining ASNs
-            if (!empty($batch)) {
+            if (! empty($batch)) {
                 $this->processAsnBatch($batch);
                 $processedCount += count($batch);
             }
@@ -187,7 +187,7 @@ class ASNUpdater
         if ($format == 'ripe') {
             if (preg_match('/^(\d+)\s+(\w{2})\s+(.+)$/', $line, $matches)) {
                 return [
-                    'asn' => (int)$matches[1],
+                    'asn' => (int) $matches[1],
                     'country_code' => $matches[2],
                     'organization' => trim($matches[3]),
                 ];
@@ -300,6 +300,7 @@ class ASNUpdater
     protected function isProxyProvider(string $org): bool
     {
         $proxyKeywords = ['proxy', 'anonymizer', 'hide', 'mask', 'tunnel'];
+
         return $this->containsAny($org, $proxyKeywords);
     }
 
@@ -313,6 +314,7 @@ class ASNUpdater
                 return true;
             }
         }
+
         return false;
     }
 
@@ -361,7 +363,7 @@ class ASNUpdater
             // ['asn' => 12345, 'organization' => 'Bad Hosting Inc', 'risk_weight' => 90],
         ];
 
-        if (!empty($riskyAsns)) {
+        if (! empty($riskyAsns)) {
             $this->processAsnBatch($riskyAsns);
         }
     }
@@ -377,10 +379,10 @@ class ASNUpdater
         switch (substr($shorthand, -1)) {
             case 'g':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'm':
                 $value *= 1024;
-            // fallthrough
+                // fallthrough
             case 'k':
                 $value *= 1024;
         }

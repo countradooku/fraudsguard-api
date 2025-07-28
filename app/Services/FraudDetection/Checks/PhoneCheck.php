@@ -173,7 +173,7 @@ class PhoneCheck implements CheckInterface
         });
     }
 
-    protected function getPhoneTypeString(int $type): string
+    protected function getPhoneTypeString(PhoneNumberType $type): string
     {
         return match ($type) {
             PhoneNumberType::MOBILE => 'mobile',
@@ -250,12 +250,16 @@ class PhoneCheck implements CheckInterface
         // Count uses in last hour
         $hourKey = $key.':hour:'.date('YmdH');
         $hourCount = Cache::increment($hourKey, 1);
-        Cache::remember($hourKey, 3600, 0);
+        Cache::remember($hourKey, 3600, function () {
+            return 0;
+        });
 
         // Count uses in last day
         $dayKey = $key.':day:'.date('Ymd');
         $dayCount = Cache::increment($dayKey, 1);
-        Cache::remember($dayKey, 86400, 0);
+        Cache::remember($dayKey, 86400, function () {
+            return 0;
+        });
 
         $riskScore = 0;
         $details = [

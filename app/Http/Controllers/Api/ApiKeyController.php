@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ApiKey;
+use Cache;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -20,7 +21,7 @@ class ApiKeyController extends Controller
             ->select('id', 'name', 'key', 'permissions', 'rate_limit', 'last_used_at', 'expires_at', 'is_active', 'created_at')
             ->orderBy('created_at', 'desc')
             ->get()
-            ->map(function ($key) {
+            ->map(function (ApiKey $key) {
                 return [
                     'id' => $key->id,
                     'name' => $key->name,
@@ -31,7 +32,7 @@ class ApiKeyController extends Controller
                     'expires_at' => $key->expires_at?->toIso8601String(),
                     'is_active' => $key->is_active,
                     'created_at' => $key->created_at->toIso8601String(),
-                    'usage_stats' => $key->getUsageStats('month'),
+                    'usage_stats' => $key->getUsageStats(),
                 ];
             });
 
@@ -57,7 +58,6 @@ class ApiKeyController extends Controller
 
         // Check API key limit based on plan
         $keyLimit = match ($user->getCurrentPlan()) {
-            'free' => 1,
             'basic' => 5,
             'pro' => 20,
             'enterprise' => 100,
@@ -113,7 +113,7 @@ class ApiKeyController extends Controller
                 'usage_stats' => [
                     'day' => $apiKey->getUsageStats('day'),
                     'week' => $apiKey->getUsageStats('week'),
-                    'month' => $apiKey->getUsageStats('month'),
+                    'month' => $apiKey->getUsageStats(),
                 ],
             ],
         ]);
@@ -181,7 +181,7 @@ class ApiKeyController extends Controller
         ]);
 
         // Clear any cached data for this key
-        \Cache::forget("api_key:{$apiKey->key}");
+        Cache::forget("api_key:$apiKey->key");
 
         return response()->json([
             'success' => true,

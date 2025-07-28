@@ -20,14 +20,15 @@ class UpdateDataSourcesCommand extends Command
         $source = $this->argument('source');
         $force = $this->option('force');
         $sync = $this->option('sync');
-        $memoryLimit = $this->option('memory') . 'M';
+        $memoryLimit = $this->option('memory').'M';
 
         // Set memory limit
         ini_set('memory_limit', $memoryLimit);
 
         $validSources = ['all', 'tor', 'disposable_emails', 'asn', 'user_agents'];
-        if (!in_array($source, $validSources)) {
-            $this->error('Invalid source. Valid sources: ' . implode(', ', $validSources));
+        if (! in_array($source, $validSources)) {
+            $this->error('Invalid source. Valid sources: '.implode(', ', $validSources));
+
             return 1;
         }
 
@@ -39,18 +40,19 @@ class UpdateDataSourcesCommand extends Command
                 $job->handle();
 
                 $this->info('Data source update completed successfully');
-                $this->line('Peak memory usage: ' . $this->formatBytes(memory_get_peak_usage(true)));
+                $this->line('Peak memory usage: '.$this->formatBytes(memory_get_peak_usage(true)));
 
                 return 0;
             } catch (\Exception $e) {
-                $this->error('Data source update failed: ' . $e->getMessage());
-                $this->line('Peak memory usage: ' . $this->formatBytes(memory_get_peak_usage(true)));
+                $this->error('Data source update failed: '.$e->getMessage());
+                $this->line('Peak memory usage: '.$this->formatBytes(memory_get_peak_usage(true)));
 
                 return 1;
             }
         } else {
             UpdateDataSourcesJob::dispatch($source, $force);
             $this->info('Data source update job queued');
+
             return 0;
         }
     }
@@ -63,6 +65,6 @@ class UpdateDataSourcesCommand extends Command
             $size /= 1024;
         }
 
-        return round($size, $precision) . ' ' . $units[$i];
+        return round($size, $precision).' '.$units[$i];
     }
 }
